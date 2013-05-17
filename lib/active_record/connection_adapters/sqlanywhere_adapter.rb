@@ -230,9 +230,15 @@ module ActiveRecord
 
       # Applies quotations around column names in generated queries
       def quote_column_name(name) #:nodoc:
-        # Remove backslashes and double quotes from column names
-        name = name.to_s.gsub(/\\|"/, '')
-        %Q("#{name}")
+        if name.is_a? Array
+          # Remove backslashes and double quotes from column names
+          name = name.map { |n| n.to_s.gsub(/\\|"/, '') }
+          %Q("#{name.join('","')}")
+        else
+          # Remove backslashes and double quotes from column names
+          name = name.to_s.gsub(/\\|"/, '')
+          %Q("#{name}")
+        end
       end
 
       # Handles special quoting of binary columns. Binary columns will be treated as strings inside of ActiveRecord.
