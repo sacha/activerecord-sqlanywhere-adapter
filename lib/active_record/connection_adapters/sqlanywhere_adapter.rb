@@ -241,9 +241,7 @@ module ActiveRecord
       def quote_table_name(name)
         # Remove backslashes and double quotes from column names
         name = name.to_s.gsub(/\\|"/, '')
-        # If it contains a dot, leave that out of quotes (by quoting it here..)
-        name = name.gsub(/\./, '"."')
-        %Q("#{name}")
+        %Q("#{@userspace}"."#{name}")
       end
 
       # Handles special quoting of binary columns. Binary columns will be treated as strings inside of ActiveRecord.
