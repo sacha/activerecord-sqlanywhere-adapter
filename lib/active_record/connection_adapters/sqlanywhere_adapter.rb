@@ -84,11 +84,11 @@ module ActiveRecord
         connection_string += "Idle=0" # Prevent the server from disconnecting us if we're idle for >240mins (by default)
       end
 
-      @connection_userspace = config[:userspace] || config[:username]
-
       db = SA.instance.api.sqlany_new_connection()
+
+      userspace = config[:userspace] || config[:username]
       
-      ConnectionAdapters::SQLAnywhereAdapter.new(db, logger, connection_string)
+      ConnectionAdapters::SQLAnywhereAdapter.new(db, logger, connection_string, userspace)
     end
   end
 
@@ -152,11 +152,12 @@ module ActiveRecord
     end
     
     class SQLAnywhereAdapter < AbstractAdapter
-      def initialize( connection, logger, connection_string = "") #:nodoc:
+      def initialize( connection, logger, connection_string = "", userspace = "") #:nodoc:
         super(connection, logger)
         @auto_commit = true
         @affected_rows = 0
         @connection_string = connection_string
+        @userspace = userspace
         @visitor = Arel::Visitors::SQLAnywhere.new self
         connect!
       end
@@ -377,7 +378,7 @@ module ActiveRecord
       # Do not return SYS-owned or DBO-owned tables or RS_systabgroup-owned
       def tables(name = nil) #:nodoc:
         #sql = "SELECT table_name FROM SYS.SYSTABLE WHERE creator NOT IN (0,3,5)"
-        sql = "SELECT table_name FROM SYS.SYSTABLE WHERE creator IN (SELECT user_id from SYS.SYSUSER WHERE user_name = '#{@connection_userspace}')"
+        sql = "SELECT table_name FROM SYS.SYSTABLE WHERE creator IN (SELECT user_id from SYS.SYSUSER WHERE user_name = '#{@userspace}')"
         exec_query(sql, name).map { |row| row["table_name"] }
       end
       
@@ -388,7 +389,7 @@ module ActiveRecord
       end
       
       def indexes(table_name, name = nil) #:nodoc:
-        sql = "SELECT DISTINCT index_name, \"unique\" FROM SYS.SYSTABLE INNER JOIN SYS.SYSIDXCOL ON SYS.SYSTABLE.table_id = SYS.SYSIDXCOL.table_id INNER JOIN SYS.SYSIDX ON SYS.SYSTABLE.table_id = SYS.SYSIDX.table_id AND SYS.SYSIDXCOL.index_id = SYS.SYSIDX.index_id WHERE table_name = '#{table_name}' AND creator = (SELECT user_id from SYS.SYSUSER WHERE user_name = '#{@connection_userspace}') AND index_category > 2"
+        sql = "SELECT DISTINCT index_name, \"unique\" FROM SYS.SYSTABLE INNER JOIN SYS.SYSIDXCOL ON SYS.SYSTABLE.table_id = SYS.SYSIDXCOL.table_id INNER JOIN SYS.SYSIDX ON SYS.SYSTABLE.table_id = SYS.SYSIDX.table_id AND SYS.SYSIDXCOL.index_id = SYS.SYSIDX.index_id WHERE table_name = '#{table_name}' AND creator = (SELECT user_id from SYS.SYSUSER WHERE user_name = '#{@userspace}') AND index_category > 2"
         exec_query(sql, name).map do |row|
           index = IndexDefinition.new(table_name, row['index_name'])
           index.unique = row['unique'] == 1
@@ -399,7 +400,7 @@ module ActiveRecord
       end
 
       def primary_key(table_name) #:nodoc:
-        sql = "SELECT cname from SYS.SYSCOLUMNS where tname = '#{table_name}' and creator = '#{@connection_userspace}' and in_primary_key = 'Y'"
+        sql = "SELECT cname from SYS.SYSCOLUMNS where tname = '#{table_name}' and creator = '#{@userspace}' and in_primary_key = 'Y'"
         rs = exec_query(sql)
         if !rs.nil? and !rs.first.nil?
           rs.first['cname']
@@ -505,7 +506,7 @@ FROM
   INNER JOIN SYS.SYSTABLE ON SYS.SYSCOLUMN.table_id = SYS.SYSTABLE.table_id 
   INNER JOIN SYS.SYSDOMAIN ON SYS.SYSCOLUMN.domain_id = SYS.SYSDOMAIN.domain_id
 WHERE
-  table_name = '#{table_name}' AND creator = (SELECT user_id from SYS.SYSUSER WHERE user_name = '#{@connection_userspace}')
+  table_name = '#{table_name}' AND creator = (SELECT user_id from SYS.SYSUSER WHERE user_name = '#{@userspace}')
 SQL
           structure = exec_query(sql, :skip_logging).to_hash
 
